@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import sys
-#import espresso
 from qpsolvers import solve_qp
 import quadprog
 import qpsolvers
@@ -16,7 +15,6 @@ from scipy.linalg import eig
 def Transform_f(f, lambda_y, p, N_p):
     # Compute f_transpose from OCP first, then transpose to get F for quadprog
     # f_transpose = [f, lambda_y * ones(1, p * N_p)]
-
     f_transpose = np.hstack((f, lambda_y * np.ones((1, p * N_p))))
     Ft = f_transpose.T
     return Ft
@@ -66,31 +64,22 @@ def Transform_Inequality(G, e, HyP, Y_0, p, N_p):
     # Compute Gt
     # Extend columns of G matrix
     row_G = G.shape[0]
-        
-    print("debug trafo ineq 0")
     Gt = np.hstack((G, np.zeros((row_G, p * N_p))))
-    print("debug trafo ineq 1")
     # Compute Gt for second to last row and last row
     G_inequality_constraint_1 = np.hstack((HyP, (-1) * np.ones((p * N_p, p * N_p))))
-        
-    print("debug trafo ineq 2")
     G_inequality_constraint_2 = np.hstack(((-1) * HyP, (-1) * np.ones((p * N_p, p * N_p))))
 
     # Update Gt with the second to last row
     Gt = np.vstack((Gt, G_inequality_constraint_1))
-    print("debug trafo ineq 3")
+
     # Update Gt with the last row
     Gt = np.vstack((Gt, G_inequality_constraint_2))
-    print("debug trafo ineq 4")
     # Compute et
     #et = np.vstack((e, Y_0,np.multiply(Y_0, -1)))
-    print(f"e:{e.shape}")
-    print(f"Y_0:{Y_0.shape}")
+
     et = np.vstack((e, Y_0))
       
-    print("debug trafo ineq 5")
     et = np.vstack((et,np.multiply(Y_0, -1)))
-    print("debug trafo ineq 6")
     return Gt, et
 
 def TransformOCP(H, f, lambda_2, lambda_y, p, N_p):
@@ -102,7 +91,7 @@ def TransformOCP(H, f, lambda_2, lambda_y, p, N_p):
     row_H, col_H = H.shape
 
     # Create a block of zeros
-    zeros_block = np.ones((row_H, p * N_p))
+    zeros_block = np.zeros((row_H, p * N_p))
 
     # Concatenate H with the zeros block to the right
     Ht = np.hstack((H, zeros_block))
@@ -110,7 +99,7 @@ def TransformOCP(H, f, lambda_2, lambda_y, p, N_p):
     #Ht = np.vstack(np.hstack((H, np.zeros((row_H, p * N_p)))), np.zeros((p * N_p, row_H + p * N_p)))
     col_Ht = Ht.shape[1]
     #Create a block of zeros
-    zeros_block = np.ones((p * N_p, col_Ht))
+    zeros_block = np.zeros((p * N_p, col_Ht))
 
     # Stack Ht and the zeros block vertically
     Ht = np.vstack((Ht, zeros_block))
@@ -172,8 +161,8 @@ data_length = L + N + N_p - 1
 # Slice input and output matrices to get a square D_tilde
 ud = ud[:, 0:data_length]
 yd = yd[:, 0:data_length]
-ud = np.array(ud, dtype=np.float128)
-yd = np.array(yd, dtype=np.float128)
+ud = np.array(ud, dtype=np.float64)
+yd = np.array(yd, dtype=np.float64)
 
 depth = N + N_p
 
@@ -181,24 +170,24 @@ depth = N + N_p
 print(ud)
 # Construct (block-)hankel matrices and partition them for future/past
 Hu = blockHankelMat(ud, depth)  # Hankel matrix of inputs
-Hu = np.array(Hu, dtype=np.float128)
+Hu = np.array(Hu, dtype=np.float64)
 HuP = Hu[0:m * N_p, :]  # Block matrix for "past" inputs
 HuF = Hu[m * N_p:, :]  # Block matrix for "future" inputs
 Hy = blockHankelMat(yd, depth)  # Hankel matrix of outputs
-Hy = np.array(Hy, dtype=np.float128)
+Hy = np.array(Hy, dtype=np.float64)
 HyP = Hy[0:N_p * p, :]  # Block matrix for "past" outputs
 HyF = Hy[N_p * p:, :]  # Block matrix for "future" outputs
 
 D_Ntilde = np.vstack((Hu, Hy))
 
-'''print(f" rANK DnTILDE {np.linalg.matrix_rank(D_Ntilde)}")
+print(f" rANK DnTILDE {np.linalg.matrix_rank(D_Ntilde)}")
 print(f"(N + N_p) * (m + p): {(N + N_p) * (m + p)}")
 # Check GPE condition
 if np.linalg.matrix_rank(D_Ntilde) == (N + N_p) * (m + p):
     print('GPE condition satisfied.')
 else:
     print(f'rank(D_Ntilde) = {np.linalg.matrix_rank(D_Ntilde)} < {(N + N_p) * (m + p)} = (N + p) * m + p')
-    raise ValueError('GPE condition not satisfied.')'''
+    raise ValueError('GPE condition not satisfied.')
 
 # Specify DPC design parameters
 Qtilde = np.eye(p)
@@ -225,7 +214,11 @@ lambda_2 = 5
 lambda_y = 100000
 
 
-#initialize step
+#initialize initial condition using past coffee data 
+
+# We could either initialize controller with zeros for past data or a random
+#part of past coffee data
+
 coffee_data = pd.read_csv("coffee_data.csv")
 
 # choose data around operating point, skip data at coffee machine warm-up
@@ -261,7 +254,8 @@ u_0 = U_0[-1]
 # initialize u-k-minus-1 with zeros
 this.u_k_minus_one = np.zeros(m*N)
 this.u_k_minus_one = this.u_k_minus_one.reshape(m*N,1)
-#initialize Y_0 and U_0 with zeros
+
+#Initialize Y_0 and U_0 with zeros
 #U_0 = np.zeros(m*N_p)
 #Y_0 = np.zeros(p*N_p)
 #U_0 = U_0.reshape(m*N_p, 1)
@@ -275,14 +269,14 @@ this.Y_0 = Y_0
 # Compute time-invariant QP parameters
 H = 2 * (HyF.T @ QQtilde @ HyF + HuF.T @ RR @ HuF)
 H_np = np.array(H, dtype=np.float128)
-f = (-2 * Y_ref_N.T @ QQtilde @ HyF - 2 * this.u_k_minus_one.T @ RR @ HuF).astype(np.float256)
+f = -2 * Y_ref_N.T @ QQtilde @ HyF - 2 * this.u_k_minus_one.T @ RR @ HuF
 G = np.vstack((HuF, -HuF, HyF, -HyF))
 e = np.vstack((UUb, -ULb, YUb, -YLb))
 
-print(f"Size of time-invariant-H: {H.shape}")
+'''print(f"Size of time-invariant-H: {H.shape}")
 print(f"Size of time-invariant-f: {f.shape}")
 print(f"Size of time-invariant-G: {G.shape}")
-print(f"Size of time-invariant-e: {e.shape}")
+print(f"Size of time-invariant-e: {e.shape}")'''
 
 #if np.any(H):
     #raise ValueError("H-Vector contains only null values. Change variables to global variables")
@@ -296,12 +290,13 @@ this.e = e
 [Gt, et] = Transform_Inequality(G, e, HyP, Y_0, p, N_p)
 [Gt_eq, et_eq] = Transform_Equality(HuP, HyP, Y_0, U_0, p, N_p)
 
-print(f"Size of Ht: {Ht.shape}")
+#Debug
+'''print(f"Size of Ht: {Ht.shape}")
 print(f"Size of Ft: {Ft.shape}")
 print(f"Size of Gt: {Gt.shape}")
 print(f"Size of et: {et.shape}")
 print(f"Size of Gt_eq: {Gt_eq.shape}")
-print(f"Size of et_eq: {et_eq.shape}")
+print(f"Size of et_eq: {et_eq.shape}")'''
 
 this.Ht = Ht
 this.Ft = Ft
@@ -341,6 +336,7 @@ print(this.Ht.shape)
 print(this.Gt_eq.shape)
 print(this.et_eq.shape)
 
+####Compare matlab variables with python variables####
 # Load the variable from the MATLAB .mat file
 matlab_data = scipy.io.loadmat('workspace_variables.mat')
 #matlab_variable = matlab_data['variable_name']
@@ -351,13 +347,13 @@ matlab_data = scipy.io.loadmat('workspace_variables.mat')
 # Create a dictionary to store Python variables
 python_variables = {
     'Hu': Hu,
-    'Hu': Hu,
+    'Hy': Hy,
     # Add more variables as needed
 }
 
 # Load corresponding MATLAB variables
 matlab_variable1 = matlab_data['Hu']
-matlab_variable2 = matlab_data['Hu']
+matlab_variable2 = matlab_data['Hy']
 # Load more variables as needed
 
 # Compare variables
@@ -366,7 +362,7 @@ for name, py_var in python_variables.items():
     #comparison_result = (matlab_var == py_var).all()
     #print(f"{name}: Variables are equal: {comparison_result}")
 
-
+###Solve problem###
 #end_time = time.time()
 #execution_time = end_time - start_time
 #print(f"exec time: {execution_time}")
@@ -375,6 +371,7 @@ for name, py_var in python_variables.items():
 #this.Ft = this.Ft.reshape((622,))
 #this.et = this.et.reshape((320,))
 #this.et_eq = this.et_eq.reshape((30,))
+##solve using cvxopt 
 #zTildeOpt= quadprog.solve_qp(this.Ht, this.Ft)
 #zTildeOpt = solve_qp(this.Ht, this.Ft, this.Gt, this.et,this.Gt_eq, this.et_eq, solver="quadprog")
 
@@ -400,7 +397,7 @@ equality_constraints = [this.Gt_eq @ x == this.et_eq]
 problem = cp.Problem(objective, inequality_constraints + equality_constraints)
 
 
-zTildeOpt = solve_qp(this.Ht, this.Ft, this.Gt, this.et, this.Gt_eq, this.et_eq,solver="quadprog")
+#zTildeOpt = solve_qp(this.Ht, this.Ft, this.Gt, this.et, this.Gt_eq, this.et_eq,solver="quadprog")
 
 start_time = time.time()
 # Solve the problem
@@ -448,3 +445,6 @@ plt.step(np.arange(len(y_Pred[0])), y_Pred[0], where='post')
 plt.step(np.arange(len(uPred[1])+1), np.concatenate((uPred[1], [uPred[1][-1]])), where='post')
 plt.step(np.arange(len(uPred[0])+1), np.concatenate((uPred[0], [uPred[0][-1]])), where='post')
 plt.show()
+#
+
+print(UOpt)
